@@ -1,4 +1,3 @@
-Yes — keep your existing introduction, and add a clear **"How to Run on Your PC"** section after it. You can use this directly:
 
 ````markdown
 # AI-Based Network Intrusion Detection Dashboard
