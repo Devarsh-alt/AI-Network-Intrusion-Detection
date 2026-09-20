@@ -442,4 +442,4 @@ git commit -m "Add setup and usage instructions"
 git push
 ````
 
-This version makes it clear that **someone cloning your repo can reproduce the project from scratch**, while also being honest that they need to separately obtain CICIDS2017 and train the model.
+
