@@ -239,6 +239,4 @@ Python, Pandas, NumPy, Scikit-learn, Streamlit, Plotly, Matplotlib, Seaborn, Job
 
 ## Team
 
-- Devarsh Devang Uchat (24BBS0153)
-- Saksham Dubey (24BBS0081)
-- Tanay Doshi (24BBS0104)
+
