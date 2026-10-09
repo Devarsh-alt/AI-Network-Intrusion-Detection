@@ -1,0 +1,51 @@
+{
+  "title": "CICIDS2017 Binary",
+  "average": "binary",
+  "test_samples": 504160,
+  "accuracy": 0.998524278006982,
+  "precision": 0.9962372418983114,
+  "recall": 0.9950204350072814,
+  "f1": 0.9956284666729341,
+  "weighted_f1": 0.9985239186771675,
+  "labels": [
+    "Normal",
+    "Attack"
+  ],
+  "per_class": {
+    "Normal": {
+      "precision": 0.9989883469015738,
+      "recall": 0.999236298721755,
+      "f1-score": 0.9991123074279824,
+      "support": 419012.0
+    },
+    "Attack": {
+      "precision": 0.9962372418983114,
+      "recall": 0.9950204350072814,
+      "f1-score": 0.9956284666729341,
+      "support": 85148.0
+    },
+    "accuracy": 0.998524278006982,
+    "macro avg": {
+      "precision": 0.9976127943999427,
+      "recall": 0.9971283668645182,
+      "f1-score": 0.9973703870504582,
+      "support": 504160.0
+    },
+    "weighted avg": {
+      "precision": 0.9985237104988093,
+      "recall": 0.998524278006982,
+      "f1-score": 0.9985239186771675,
+      "support": 504160.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      418692,
+      320
+    ],
+    [
+      424,
+      84724
+    ]
+  ]
+}

@@ -1,209 +1,202 @@
-import pandas as pd
+import json
 import joblib
+import matplotlib
+
+matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from pathlib import Path
-
 from sklearn.metrics import (
     accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
+    precision_recall_fscore_support,
     confusion_matrix,
     classification_report
 )
 
-
-# Paths
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-MODEL_DIR = BASE_DIR / "models"
-
-RESULTS_DIR = BASE_DIR / "results"
-
-FIGURES_DIR = RESULTS_DIR / "figures"
-REPORTS_DIR = RESULTS_DIR / "reports"
-
-FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+from config import (
+    MODEL_DIR,
+    FIGURES_DIR,
+    REPORTS_DIR,
+    CATEGORIES,
+    NSL_CATEGORIES
+)
 
 
-# Evaluate model
+BINARY_NAMES = ["Normal", "Attack"]
 
-def evaluate_model():
 
+# Evaluate one model and save its report, metrics and confusion matrix
+
+def evaluate_model(model, X_test, y_test, labels, names, prefix, title):
+
+    print("\n" + "=" * 70)
+    print(f"EVALUATION: {title}")
     print("=" * 70)
-    print("MODEL EVALUATION")
-    print("=" * 70)
-
-    # Load model
-
-    model_path = MODEL_DIR / "random_forest.pkl"
-
-    model = joblib.load(model_path)
-
-    print("\nModel loaded successfully.")
-
-    # Load test data
-
-    X_test_path = MODEL_DIR / "X_test.pkl"
-    y_test_path = MODEL_DIR / "y_test.pkl"
-
-    X_test = joblib.load(X_test_path)
-    y_test = joblib.load(y_test_path)
-
-    print("Test data loaded successfully.")
-
-    print(f"\nTesting samples: {len(X_test):,}")
-
-    # Generate predictions
-
-    print("\nGenerating predictions...")
 
     y_pred = model.predict(X_test)
 
-    print("Predictions completed.")
+    accuracy = accuracy_score(y_test, y_pred)
 
-    # Calculate metrics
+    # Binary: scores for the Attack class. Multi-class: macro average.
+    average = "binary" if len(labels) == 2 else "macro"
 
-    accuracy = accuracy_score(
-        y_test,
-        y_pred
-    )
-
-    precision = precision_score(
+    precision, recall, f1, _ = precision_recall_fscore_support(
         y_test,
         y_pred,
+        labels=None if average == "binary" else labels,
+        average=average,
         zero_division=0
     )
 
-    recall = recall_score(
+    weighted_f1 = precision_recall_fscore_support(
         y_test,
         y_pred,
+        average="weighted",
         zero_division=0
-    )
-
-    f1 = f1_score(
-        y_test,
-        y_pred,
-        zero_division=0
-    )
-
-    # Display metrics
-
-    print("\n" + "=" * 70)
-    print("PERFORMANCE METRICS")
-    print("=" * 70)
+    )[2]
 
     print(f"\nAccuracy  : {accuracy:.4f}")
-    print(f"Precision : {precision:.4f}")
-    print(f"Recall    : {recall:.4f}")
-    print(f"F1 Score  : {f1:.4f}")
-
-    # Classification report
-
-    print("\n" + "=" * 70)
-    print("CLASSIFICATION REPORT")
-    print("=" * 70)
+    print(f"Precision : {precision:.4f} ({average})")
+    print(f"Recall    : {recall:.4f} ({average})")
+    print(f"F1 Score  : {f1:.4f} ({average})")
 
     report = classification_report(
         y_test,
         y_pred,
-        target_names=[
-            "Normal",
-            "Anomaly"
-        ],
+        labels=labels,
+        target_names=names,
+        digits=4,
         zero_division=0
     )
 
     print("\n" + report)
 
-    report_path = REPORTS_DIR / "classification_report.txt"
-
-    with open(report_path, "w") as file:
+    with open(REPORTS_DIR / f"{prefix}_classification_report.txt", "w") as file:
         file.write(report)
-
-    print(f"Report saved to: {report_path}")
-
-    # Confusion matrix
 
     cm = confusion_matrix(
         y_test,
-        y_pred
+        y_pred,
+        labels=labels
     )
 
-    print("\n" + "=" * 70)
-    print("CONFUSION MATRIX")
-    print("=" * 70)
-
-    print(cm)
-
-    plt.figure(figsize=(7, 5))
+    plt.figure(figsize=(1.2 * len(names) + 4, 1.0 * len(names) + 3))
 
     sns.heatmap(
         cm,
         annot=True,
         fmt="d",
-        xticklabels=[
-            "Normal",
-            "Anomaly"
-        ],
-        yticklabels=[
-            "Normal",
-            "Anomaly"
-        ]
+        cmap="Blues",
+        xticklabels=names,
+        yticklabels=names
     )
 
     plt.xlabel("Predicted")
     plt.ylabel("Actual")
-    plt.title("Random Forest Confusion Matrix")
+    plt.title(f"{title} Confusion Matrix")
 
     plt.tight_layout()
 
-    confusion_path = (
-        FIGURES_DIR / "confusion_matrix.png"
-    )
-
-    plt.savefig(confusion_path)
+    plt.savefig(FIGURES_DIR / f"{prefix}_confusion_matrix.png", dpi=150)
 
     plt.close()
 
-    print(f"\nConfusion matrix saved to: {confusion_path}")
+    metrics = {
+        "title": title,
+        "average": average,
+        "test_samples": int(len(y_test)),
+        "accuracy": float(accuracy),
+        "precision": float(precision),
+        "recall": float(recall),
+        "f1": float(f1),
+        "weighted_f1": float(weighted_f1),
+        "labels": names,
+        "per_class": classification_report(
+            y_test,
+            y_pred,
+            labels=labels,
+            target_names=names,
+            output_dict=True,
+            zero_division=0
+        ),
+        "confusion_matrix": cm.tolist()
+    }
 
-    # Save metrics
+    with open(REPORTS_DIR / f"{prefix}_metrics.json", "w") as file:
+        json.dump(metrics, file, indent=2)
 
-    metrics = pd.DataFrame({
-        "Metric": [
-            "Accuracy",
-            "Precision",
-            "Recall",
-            "F1 Score"
-        ],
-        "Score": [
-            accuracy,
-            precision,
-            recall,
-            f1
-        ]
-    })
+    print(f"Results saved with prefix: {prefix}")
 
-    metrics_path = REPORTS_DIR / "metrics.csv"
+    return metrics
 
-    metrics.to_csv(
-        metrics_path,
-        index=False
+
+# Re-evaluate the saved models on their saved test sets
+
+def evaluate_saved_models():
+
+    test = joblib.load(MODEL_DIR / "cicids_test.pkl")
+
+    binary_model = joblib.load(MODEL_DIR / "cicids_binary.pkl")
+
+    features = list(binary_model.feature_names_in_)
+
+    evaluate_model(
+        binary_model,
+        test[features],
+        test["Target"],
+        [0, 1],
+        BINARY_NAMES,
+        "cicids_binary",
+        "CICIDS2017 Binary"
     )
 
-    print(f"Metrics saved to: {metrics_path}")
+    evaluate_model(
+        joblib.load(MODEL_DIR / "cicids_multiclass.pkl"),
+        test[features],
+        test["Category"],
+        CATEGORIES,
+        CATEGORIES,
+        "cicids_multiclass",
+        "CICIDS2017 Multi-class"
+    )
+
+    nsl_test_path = MODEL_DIR / "nsl_kdd_test.pkl"
+
+    if nsl_test_path.exists():
+
+        nsl_test = joblib.load(nsl_test_path)
+
+        nsl_features = nsl_test.drop(
+            columns=["label", "difficulty", "Category", "Target"]
+        )
+
+        evaluate_model(
+            joblib.load(MODEL_DIR / "nsl_kdd_binary.pkl"),
+            nsl_features,
+            nsl_test["Target"],
+            [0, 1],
+            BINARY_NAMES,
+            "nsl_kdd_binary",
+            "NSL-KDD Binary"
+        )
+
+        evaluate_model(
+            joblib.load(MODEL_DIR / "nsl_kdd_multiclass.pkl"),
+            nsl_features,
+            nsl_test["Category"],
+            NSL_CATEGORIES,
+            NSL_CATEGORIES,
+            "nsl_kdd_multiclass",
+            "NSL-KDD Multi-class"
+        )
 
 
 # Run
 
 if __name__ == "__main__":
 
-    evaluate_model()
+    evaluate_saved_models()
 
     print("\n" + "=" * 70)
     print("EVALUATION COMPLETE")

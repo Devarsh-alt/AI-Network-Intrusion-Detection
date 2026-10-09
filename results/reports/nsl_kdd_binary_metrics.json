@@ -1,0 +1,51 @@
+{
+  "title": "NSL-KDD Binary",
+  "average": "binary",
+  "test_samples": 22544,
+  "accuracy": 0.7794535131298793,
+  "precision": 0.9688655612549206,
+  "recall": 0.632899555832619,
+  "f1": 0.7656485671191554,
+  "weighted_f1": 0.776880121300635,
+  "labels": [
+    "Normal",
+    "Attack"
+  ],
+  "per_class": {
+    "Normal": {
+      "precision": 0.6673257538309442,
+      "recall": 0.9731232622798888,
+      "f1-score": 0.7917225201072386,
+      "support": 9711.0
+    },
+    "Attack": {
+      "precision": 0.9688655612549206,
+      "recall": 0.632899555832619,
+      "f1-score": 0.7656485671191554,
+      "support": 12833.0
+    },
+    "accuracy": 0.7794535131298793,
+    "macro avg": {
+      "precision": 0.8180956575429323,
+      "recall": 0.8030114090562539,
+      "f1-score": 0.778685543613197,
+      "support": 22544.0
+    },
+    "weighted avg": {
+      "precision": 0.8389749886016987,
+      "recall": 0.7794535131298793,
+      "f1-score": 0.776880121300635,
+      "support": 22544.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      9450,
+      261
+    ],
+    [
+      4711,
+      8122
+    ]
+  ]
+}

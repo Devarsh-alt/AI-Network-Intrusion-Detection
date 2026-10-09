@@ -1,7 +1,9 @@
 pandas
 numpy
-scikit-learn
+scikit-learn>=1.4
 matplotlib
 seaborn
-streamlit
+streamlit>=1.50
+plotly
 joblib
+openai
