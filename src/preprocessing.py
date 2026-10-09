@@ -1,27 +1,26 @@
 import pandas as pd
 import numpy as np
-from pathlib import Path
+
+from config import (
+    RAW_DIR,
+    NSL_DIR,
+    LABEL_COLUMNS,
+    NORMAL,
+    NSL_COLUMNS,
+    NSL_LABEL_MAP,
+    cicids_category
+)
 
 
-# Paths
+# Load CICIDS2017 CSV files
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+def load_cicids():
 
-DATA_DIR = BASE_DIR / "data" / "raw"
-PROCESSED_DIR = BASE_DIR / "data" / "processed"
-
-PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-
-
-# Load all CSV files
-
-def load_all_data():
-
-    csv_files = sorted(DATA_DIR.glob("*.csv"))
+    csv_files = sorted(RAW_DIR.glob("*.csv"))
 
     if not csv_files:
         raise FileNotFoundError(
-            f"No CSV files found in {DATA_DIR}"
+            f"No CSV files found in {RAW_DIR}"
         )
 
     dataframes = []
@@ -32,22 +31,27 @@ def load_all_data():
 
     for file in csv_files:
 
-        print(f"\nLoading: {file.name}")
-
         df = pd.read_csv(
             file,
-            low_memory=False
+            low_memory=False,
+            encoding="latin-1"
         )
 
         df.columns = df.columns.str.strip()
 
-        print(f"Rows: {len(df):,}")
+        print(f"{file.name}: {len(df):,} rows")
 
         dataframes.append(df)
 
     data = pd.concat(
         dataframes,
         ignore_index=True
+    )
+
+    # The raw files contain the "Fwd Header Length" column twice
+    data = data.drop(
+        columns="Fwd Header Length.1",
+        errors="ignore"
     )
 
     print("\nTotal rows:", f"{len(data):,}")
@@ -64,155 +68,107 @@ def clean_data(df):
     print("BASIC DATA CLEANING")
     print("=" * 70)
 
-    df.columns = df.columns.str.strip()
-
-    before = len(df)
-
-    df = df.drop_duplicates()
-
-    after = len(df)
-
-    print(f"\nDuplicate rows removed: {before - after:,}")
-
     df = df.replace(
         [np.inf, -np.inf],
         np.nan
     )
 
-    missing_before = df.isnull().sum().sum()
-
-    print(f"Missing/invalid values found: {missing_before:,}")
+    before = len(df)
 
     df = df.dropna()
 
-    missing_after = df.isnull().sum().sum()
+    print(f"\nRows with missing/infinite values removed: {before - len(df):,}")
 
+    before = len(df)
+
+    df = df.drop_duplicates()
+
+    print(f"Duplicate rows removed: {before - len(df):,}")
     print(f"Rows after cleaning: {len(df):,}")
-    print(f"Missing values remaining: {missing_after:,}")
 
-    return df
+    return df.reset_index(drop=True)
 
 
-# Create binary target
+# Create binary and multi-class targets
 
-def create_binary_label(df):
-
-    print("\n" + "=" * 70)
-    print("CREATING BINARY LABEL")
-    print("=" * 70)
+def create_labels(df):
 
     df["Label"] = df["Label"].astype(str).str.strip()
 
-    df["Target"] = (
-        df["Label"]
-        .apply(lambda x: 0 if x == "BENIGN" else 1)
-    )
+    # Attack category (multi-class target)
+    df["Category"] = df["Label"].map(cicids_category)
 
-    print("\nBinary label distribution:")
+    # 0 = Normal, 1 = Attack (binary target)
+    df["Target"] = (df["Category"] != NORMAL).astype(int)
 
-    print(
-        df["Target"]
-        .value_counts()
-        .sort_index()
-        .rename({
-            0: "Normal",
-            1: "Anomaly"
-        })
-    )
+    print("\nCategory distribution:")
+    print(df["Category"].value_counts())
 
     return df
 
 
-# Feature selection
+# Model input columns of the cleaned CICIDS2017 data
 
-def select_features(df):
+def feature_columns(df):
 
-    print("\n" + "=" * 70)
-    print("FEATURE SELECTION")
-    print("=" * 70)
-
-    selected_features = [
-        "Destination Port",
-        "Flow Duration",
-        "Total Fwd Packets",
-        "Total Backward Packets",
-        "Total Length of Fwd Packets",
-        "Total Length of Bwd Packets",
-        "Fwd Packet Length Max",
-        "Fwd Packet Length Min",
-        "Fwd Packet Length Mean",
-        "Bwd Packet Length Max",
-        "Bwd Packet Length Min",
-        "Bwd Packet Length Mean",
-        "Flow Bytes/s",
-        "Flow Packets/s",
-        "Packet Length Mean",
-        "Packet Length Std",
-        "Packet Length Variance",
-        "SYN Flag Count",
-        "ACK Flag Count",
-        "Average Packet Size"
+    return [
+        column
+        for column in df.columns
+        if column not in LABEL_COLUMNS
     ]
 
-    selected_features = [
-        feature
-        for feature in selected_features
-        if feature in df.columns
-    ]
 
-    print(f"\nSelected features: {len(selected_features)}")
-
-    for feature in selected_features:
-        print(f"  - {feature}")
-
-    X = df[selected_features].copy()
-
-    y = df["Target"].copy()
-
-    return X, y
-
-
-# Main preprocessing pipeline
+# Main CICIDS2017 preprocessing pipeline
 
 def preprocess():
 
-    df = load_all_data()
+    df = load_cicids()
 
     df = clean_data(df)
 
-    df = create_binary_label(df)
+    df = create_labels(df)
 
-    X, y = select_features(df)
+    return df
 
-    print("\n" + "=" * 70)
-    print("PREPROCESSING COMPLETE")
-    print("=" * 70)
 
-    print("\nFeature matrix shape:", X.shape)
-    print("Target shape:", y.shape)
+# NSL-KDD
 
-    return X, y
+def load_nsl_kdd():
+
+    frames = []
+
+    for name in ("KDDTrain+.txt", "KDDTest+.txt"):
+
+        path = NSL_DIR / name
+
+        if not path.exists():
+            raise FileNotFoundError(
+                f"{name} not found in {NSL_DIR}"
+            )
+
+        df = pd.read_csv(
+            path,
+            names=NSL_COLUMNS
+        )
+
+        df["Category"] = df["label"].map(NSL_LABEL_MAP)
+
+        if df["Category"].isnull().any():
+            unknown = df.loc[df["Category"].isnull(), "label"].unique()
+            raise ValueError(f"Unmapped NSL-KDD labels: {unknown}")
+
+        df["Target"] = (df["Category"] != NORMAL).astype(int)
+
+        frames.append(df)
+
+    return frames[0], frames[1]
 
 
 # Run
 
 if __name__ == "__main__":
 
-    X, y = preprocess()
+    df = preprocess()
 
-    print("\nFirst 5 feature rows:")
-    print(X.head())
-
-    print("\nFirst 5 targets:")
-    print(y.head())
-
-    print("\nTarget distribution:")
-
-    print(
-        y.value_counts()
-        .sort_index()
-        .rename({
-            0: "Normal",
-            1: "Anomaly"
-        })
-    )
+    print("\nFirst 5 rows:")
+    print(df.head())

@@ -1,445 +1,244 @@
-
-````markdown
 # AI-Based Network Intrusion Detection Dashboard
 
-A machine-learning based Network Intrusion Detection System (IDS) that classifies network traffic as **Normal** or **Anomaly** using the CICIDS2017 dataset and a Random Forest classifier.
+A machine-learning Network Intrusion Detection System (IDS) that detects malicious network traffic, names the type of attack, raises alerts on a live dashboard, and answers questions in plain English.
 
-The project includes data preprocessing, feature selection, feature scaling, model training, evaluation, visualization, and a Streamlit dashboard.
+It is trained and evaluated on two benchmark datasets, **CICIDS2017** and **NSL-KDD**.
 
-## Project Overview
+## Features
 
-Traditional intrusion detection systems often rely on predefined signatures to identify known attacks. Machine learning can instead learn patterns from network traffic and classify previously observed traffic patterns as normal or anomalous.
+- **Attack detection** (Normal vs Attack) and **attack classification** (DoS, Port Scan, Brute Force, Botnet, Web Attack, Other) with a Random Forest
+- **Second benchmark**: NSL-KDD with its DoS / Probe / R2L / U2R categories
+- **Model comparison**: Naive Bayes, Logistic Regression, K-Nearest Neighbours, Decision Tree, Random Forest, Gradient Boosting
+- **Feature selection comparison**: all features, top 20 by importance, hand-picked, PCA
+- **Live Monitor**: a simulated traffic stream with real-time predictions, alerts and severity levels
+- **Explanations**: which features drove each prediction
+- **CSV upload** for batch classification, and **exportable** alert logs and incident reports
+- **Assistant**: a retrieval-augmented chatbot that answers questions about the alerts, the attacks, the models and the results
 
-This project implements a basic proof-of-concept ML-based IDS using:
+> The Live Monitor replays held-out CICIDS2017 test flows. It does not capture packets from a real network.
 
-- CICIDS2017 dataset
-- Python
-- Pandas and NumPy
-- Scikit-learn
-- Random Forest
-- StandardScaler
-- Streamlit
-- Matplotlib and Seaborn
-- Joblib
+## Results
 
-The current implementation performs **binary classification**:
+All numbers below were produced by the scripts in `src/` and are saved in `results/reports/`.
 
-```text
-Normal Traffic → 0
-Anomalous Traffic → 1
-````
+### CICIDS2017 (Random Forest, all 77 flow features, 504,160 test flows)
 
-## How to Run on Your PC
+| Task | Accuracy | Precision | Recall | F1 |
+|---|---:|---:|---:|---:|
+| Attack detection (binary, Attack class) | 99.85% | 99.62% | 99.50% | 99.56% |
+| Attack type (7 classes, macro average) | 99.85% | 97.47% | 90.84% | 93.62% |
 
-Follow these steps to set up and run the project on a new computer.
+| Attack type | Precision | Recall | F1 | Test flows |
+|---|---:|---:|---:|---:|
+| Normal | 99.90% | 99.92% | 99.91% | 419,012 |
+| DoS | 99.89% | 99.81% | 99.85% | 64,352 |
+| PortScan | 98.91% | 98.94% | 98.93% | 18,139 |
+| Brute Force | 100.00% | 99.84% | 99.92% | 1,830 |
+| Botnet | 84.07% | 73.26% | 78.30% | 389 |
+| Web Attack | 99.52% | 97.44% | 98.47% | 429 |
+| Other | 100.00% | 66.67% | 80.00% | 9 |
 
-### 1. Clone the Repository
+Botnet is the weakest large category: about a quarter of botnet flows are classified as normal. "Other" (Infiltration and Heartbleed) has only 9 test flows, so its score is not reliable.
 
-Make sure Git is installed, then open a terminal and run:
+### Feature selection (Random Forest, full CICIDS2017, same split)
+
+| Feature set | Accuracy | Macro F1 | Botnet F1 | Web Attack F1 |
+|---|---:|---:|---:|---:|
+| All features (77) | 99.85% | 93.62% | 78.30% | 98.47% |
+| PCA (20 components) | 99.82% | 83.33% | 67.72% | 97.76% |
+| Top 20 by Random Forest importance | 99.76% | 82.95% | 77.16% | 24.46% |
+| Hand-picked (20) | 99.63% | 79.26% | 56.32% | 21.13% |
+| Hand-picked without Destination Port (19) | 99.57% | 78.80% | 54.86% | 20.03% |
+
+Accuracy is above 99.5% for every feature set, but the reduced sets miss most web attacks. This is why the deployed model uses all features, and why per-class F1 matters more than accuracy on imbalanced data.
+
+### Model comparison on CICIDS2017 (sample capped at 60,000 flows per category)
+
+| Model | Accuracy | Macro F1 |
+|---|---:|---:|
+| Random Forest | 99.81% | 98.18% |
+| Decision Tree | 99.80% | 97.08% |
+| K-Nearest Neighbours | 99.39% | 92.06% |
+| Gradient Boosting | 99.33% | 85.25% |
+| Logistic Regression | 96.82% | 82.16% |
+| Naive Bayes | 71.34% | 55.31% |
+
+### NSL-KDD (trained on KDDTrain+, tested on KDDTest+)
+
+| Model (5 classes) | Accuracy | Macro F1 |
+|---|---:|---:|
+| Gradient Boosting | 79.83% | 60.10% |
+| K-Nearest Neighbours | 76.60% | 55.50% |
+| Logistic Regression | 76.15% | 57.01% |
+| Decision Tree | 76.00% | 57.41% |
+| Random Forest | 74.10% | 50.83% |
+| Naive Bayes | 47.30% | 32.99% |
+
+Random Forest binary detection on NSL-KDD: 77.95% accuracy, 96.89% precision, 63.29% recall.
+
+NSL-KDD scores are much lower because KDDTest+ contains attack types that never appear in the training file. R2L and U2R attacks are missed most often. This is a more realistic picture of how an IDS handles unseen attacks than the CICIDS2017 random split.
+
+## How to Run
+
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/Devarsh-alt/AI-Network-Intrusion-Detection.git
 ```
 
-Move into the project directory:
-
 ```bash
 cd AI-Network-Intrusion-Detection
 ```
 
-### 2. Install Python
+Python 3.9 or newer is required. Create and activate a virtual environment.
 
-Install **Python 3.9 or newer**.
-
-Check your Python installation:
+Linux / macOS:
 
 ```bash
-python --version
+python3 -m venv venv && source venv/bin/activate
 ```
 
-On some Linux/macOS systems, use:
-
-```bash
-python3 --version
-```
-
-### 3. Create a Virtual Environment
-
-Creating a virtual environment keeps the project's dependencies separate from other Python projects.
-
-#### Windows
+Windows (PowerShell):
 
 ```powershell
-python -m venv venv
+python -m venv venv; .\venv\Scripts\Activate.ps1
 ```
 
-Activate it:
-
-```powershell
-.\venv\Scripts\Activate.ps1
-```
-
-If PowerShell prevents activation, run:
-
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-Then activate the environment again:
-
-```powershell
-.\venv\Scripts\Activate.ps1
-```
-
-#### Linux / macOS
-
-```bash
-python3 -m venv venv
-```
-
-Activate it:
-
-```bash
-source venv/bin/activate
-```
-
-After activation, the terminal should show:
-
-```text
-(venv)
-```
-
-### 4. Install Dependencies
-
-With the virtual environment activated, install all required Python packages:
+Install the dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-The project uses:
+### 2. Get the datasets
+
+The datasets are not in the repository because of their size.
+
+**CICIDS2017**: download the "MachineLearningCSV" archive (8 CSV files, about 885 MB unzipped) from the [Canadian Institute for Cybersecurity](https://www.unb.ca/cic/datasets/ids-2017.html) or a mirror such as Kaggle, and place the CSV files in `data/raw/`.
+
+**NSL-KDD**: download `KDDTrain+.txt` and `KDDTest+.txt` (from the [CIC NSL-KDD page](https://www.unb.ca/cic/datasets/nsl.html) or a mirror) and place them in `data/nsl_kdd/`.
 
 ```text
-pandas
-numpy
-scikit-learn
-matplotlib
-seaborn
-streamlit
-joblib
+data/
+├── raw/
+│   ├── Monday-WorkingHours.pcap_ISCX.csv
+│   ├── Tuesday-WorkingHours.pcap_ISCX.csv
+│   └── ... (8 files)
+└── nsl_kdd/
+    ├── KDDTrain+.txt
+    └── KDDTest+.txt
 ```
 
-You can verify that everything was installed correctly:
-
-```bash
-python -c "import pandas, numpy, sklearn, matplotlib, seaborn, streamlit, joblib; print('All packages installed successfully')"
-```
-
-### 5. Download the CICIDS2017 Dataset
-
-The project uses the CICIDS2017 dataset.
-
-Download the CSV version of CICIDS2017 from Kaggle or another legitimate source.
-
-The project expects the following eight CSV files:
-
-```text
-Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv
-Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv
-Friday-WorkingHours-Morning.pcap_ISCX.csv
-Monday-WorkingHours.pcap_ISCX.csv
-Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv
-Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv
-Tuesday-WorkingHours.pcap_ISCX.csv
-Wednesday-workingHours.pcap_ISCX.csv
-```
-
-Create the following directory:
-
-```text
-data/raw/
-```
-
-Place all eight CSV files inside it.
-
-The project structure should look like:
-
-```text
-AI-Network-Intrusion-Detection/
-│
-├── data/
-│   └── raw/
-│       ├── Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv
-│       ├── Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv
-│       ├── Friday-WorkingHours-Morning.pcap_ISCX.csv
-│       ├── Monday-WorkingHours.pcap_ISCX.csv
-│       ├── Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv
-│       ├── Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv
-│       ├── Tuesday-WorkingHours.pcap_ISCX.csv
-│       └── Wednesday-workingHours.pcap_ISCX.csv
-│
-├── app/
-├── models/
-├── results/
-├── src/
-├── requirements.txt
-└── README.md
-```
-
-> **Note:** The CICIDS2017 dataset is not included in this GitHub repository because of its large size.
-
-### 6. Train the Model
-
-After placing the dataset inside `data/raw/`, run:
+### 3. Train and evaluate
 
 ```bash
 python src/train_model.py
 ```
 
-This script will:
-
-1. Load the CICIDS2017 CSV files
-2. Clean the data
-3. Remove duplicate and invalid records
-4. Convert the original labels into Normal/Anomaly classes
-5. Select 20 network-flow features
-6. Split the data into training and testing sets
-7. Standardize the features
-8. Train the Random Forest classifier
-9. Save the trained model and preprocessing files
-
-Training may take several minutes depending on the computer's CPU and available RAM.
-
-After successful training, the following files will be generated:
-
-```text
-models/
-├── random_forest.pkl
-├── scaler.pkl
-├── X_test.pkl
-└── y_test.pkl
-```
-
-### 7. Evaluate the Model
-
-Run:
+Trains the CICIDS2017 binary and multi-class models, evaluates them, and builds the traffic stream for the dashboard. Takes about 5 minutes on a 12-core laptop and needs several GB of free RAM, because the full dataset is loaded into memory.
 
 ```bash
-python src/evaluate.py
+python src/train_nsl_kdd.py
 ```
 
-This evaluates the trained Random Forest using the saved test dataset.
+Trains and compares all models on NSL-KDD. Takes under a minute.
 
-The evaluation calculates:
-
-* Accuracy
-* Precision
-* Recall
-* F1 Score
-* Classification Report
-* Confusion Matrix
-
-Results are saved in:
-
-```text
-results/
-├── figures/
-│   └── confusion_matrix.png
-│
-└── reports/
-    ├── classification_report.txt
-    └── metrics.csv
+```bash
+python src/compare_models.py
 ```
 
-### 8. Run the Streamlit Dashboard
+Runs the CICIDS2017 model comparison and feature selection comparison. Takes about 10 minutes. The dashboard works without it, but those two sections will be missing.
 
-Once the model has been trained, start the dashboard:
+Trained models go to `models/` and results to `results/`. To re-evaluate saved models without retraining, run `python src/evaluate.py`.
+
+### 4. Run the dashboard
 
 ```bash
 streamlit run app/app.py
 ```
 
-Streamlit will display a local address similar to:
+Open http://localhost:8501.
+
+### 5. Set up the assistant (optional)
+
+The assistant uses an LLM through [Groq](https://console.groq.com) or [OpenRouter](https://openrouter.ai). Create an API key with either provider, then copy `.env.example` to `.env` and add the key:
 
 ```text
-http://localhost:8501
+GROQ_API_KEY=your_key_here
 ```
 
-Open this address in your web browser.
+You can also paste the key into the Assistant page. `.env` is ignored by git, so never commit a key anywhere else. Without a key, the assistant still works in a limited mode that shows the most relevant knowledge base passages.
 
-The dashboard provides:
+## Dashboard Pages
 
-* Dataset overview
-* Normal vs Anomaly distribution
-* Model performance metrics
-* Confusion matrix
-* Feature importance
-* Network traffic prediction
+| Page | What it shows |
+|---|---|
+| Overview | Headline results for both datasets and the class distribution |
+| Live Monitor | Simulated traffic stream, alerts per second, severity, alert log, CSV and incident report export |
+| Investigate | Explanation of any alert, a single-flow tester with editable values, CSV upload |
+| Model Performance | Metrics, confusion matrix, per-class results, model and feature selection comparisons |
+| Assistant | Chatbot for questions about the session's alerts and the project |
 
-### 9. Complete Setup Flow
+## How the Assistant Works
 
-For a new computer, the complete process is:
+The assistant combines two techniques:
 
-```text
-Clone Repository
-       ↓
-Install Python
-       ↓
-Create Virtual Environment
-       ↓
-Install requirements.txt
-       ↓
-Download CICIDS2017
-       ↓
-Place CSV files in data/raw/
-       ↓
-Run train_model.py
-       ↓
-Run evaluate.py
-       ↓
-Run Streamlit Dashboard
-```
+1. **Retrieval (RAG)**: the files in `knowledge/` and the saved results in `results/reports/` are split into passages and indexed with TF-IDF. The passages most relevant to each question are given to the LLM as context, and listed under "Sources" in the chat.
+2. **Tools**: questions about the traffic in the current session ("how many DoS alerts?", "which ports were targeted?") are answered by the LLM calling fixed query functions over the alert log, so counts are computed and not guessed.
 
-### 10. Important Notes
+To extend what the assistant knows, add a `##` section to a file in `knowledge/`.
 
-The following files and directories are intentionally **not included in GitHub**:
+## Alerts
 
-```text
-venv/
-data/raw/
-data/processed/
-models/*.pkl
-```
+A flow raises an alert when the model classifies it as an attack and its attack probability is at or above the threshold set in the sidebar.
 
-They are excluded because:
+| Attack type | Severity |
+|---|---|
+| PortScan | Medium |
+| DoS, Brute Force, Web Attack | High |
+| Botnet, Other | Critical |
 
-* The virtual environment is machine-specific.
-* The CICIDS2017 CSV files are very large.
-* Model files are generated by the training process.
-
-Therefore, anyone cloning the repository onto a new computer must **download the dataset and run the training script first**.
-
-## Model Performance
-
-Using the current configuration, the Random Forest model achieved:
-
-| Metric    |  Score |
-| --------- | -----: |
-| Accuracy  | 99.69% |
-| Precision | 98.94% |
-| Recall    | 99.23% |
-| F1 Score  | 99.09% |
-
-## Features Used
-
-The model uses 20 network-flow features:
-
-1. Destination Port
-2. Flow Duration
-3. Total Fwd Packets
-4. Total Backward Packets
-5. Total Length of Fwd Packets
-6. Total Length of Bwd Packets
-7. Fwd Packet Length Max
-8. Fwd Packet Length Min
-9. Fwd Packet Length Mean
-10. Bwd Packet Length Max
-11. Bwd Packet Length Min
-12. Bwd Packet Length Mean
-13. Flow Bytes/s
-14. Flow Packets/s
-15. Packet Length Mean
-16. Packet Length Std
-17. Packet Length Variance
-18. SYN Flag Count
-19. ACK Flag Count
-20. Average Packet Size
+Alerts with model confidence below 70% are downgraded to Low.
 
 ## Project Structure
 
 ```text
 AI-Network-Intrusion-Detection/
-│
 ├── app/
-│   └── app.py
-│
-├── data/
-│   ├── raw/
-│   └── processed/
-│
-├── models/
-│
-├── notebooks/
-│
+│   └── app.py                 Streamlit dashboard
+├── knowledge/                 Knowledge base for the assistant
 ├── results/
-│   ├── figures/
-│   └── reports/
-│
+│   ├── figures/               Confusion matrices
+│   └── reports/               Metrics, reports and comparison tables
 ├── src/
-│   ├── __init__.py
-│   ├── data_loader.py
-│   ├── preprocessing.py
-│   ├── train_model.py
-│   └── evaluate.py
-│
-├── .gitignore
+│   ├── config.py              Paths, feature lists and label mappings
+│   ├── data_loader.py         Dataset exploration script
+│   ├── preprocessing.py       Loading and cleaning for both datasets
+│   ├── train_model.py         CICIDS2017 training
+│   ├── train_nsl_kdd.py       NSL-KDD training and model comparison
+│   ├── compare_models.py      CICIDS2017 model and feature comparisons
+│   ├── evaluate.py            Metrics, reports and confusion matrices
+│   ├── alerts.py              Alert scoring, explanations, incident report
+│   └── assistant.py           Retrieval, tools and LLM chat
+├── .env.example
 ├── requirements.txt
 └── README.md
 ```
 
-## Current Scope
+## Limitations
 
-This project is a **machine-learning proof-of-concept Network Intrusion Detection System**.
-
-It currently supports:
-
-* CICIDS2017 dataset processing
-* Data cleaning
-* Feature selection
-* Feature scaling
-* Binary Normal/Anomaly classification
-* Random Forest classification
-* Model evaluation
-* Streamlit visualization
-* Network-flow prediction
-
-The current implementation does **not** perform direct live packet capture or production network monitoring.
-
-## Future Improvements
-
-Possible future improvements include:
-
-* Multi-class attack classification
-* Additional machine-learning models
-* Real-time packet capture
-* Live network traffic monitoring
-* Automated alerts
-* Model retraining
-* Advanced feature selection
-* Cloud deployment
+- The Live Monitor is a simulation. Real deployment needs live flow extraction (for example with CICFlowMeter) feeding the model.
+- The model only recognises attack types present in its training data, as the NSL-KDD results show.
+- CICIDS2017 is lab-generated traffic from 2017 with known labelling errors, and a random train/test split gives optimistic scores because flows from the same attack session land in both sets.
+- Botnet recall is 73%, and the rarest categories have too few samples for reliable scores.
+- Prediction explanations are an approximation (occlusion against typical normal values).
 
 ## Technologies
 
-* Python
-* Pandas
-* NumPy
-* Scikit-learn
-* Random Forest
-* StandardScaler
-* Matplotlib
-* Seaborn
-* Streamlit
-* Joblib
-* CICIDS2017
+Python, Pandas, NumPy, Scikit-learn, Streamlit, Plotly, Matplotlib, Seaborn, Joblib, and the OpenAI-compatible APIs of Groq and OpenRouter.
 
-````
+## Team
 
-Then save the README and run:
-
-```powershell
-git add README.md
-git commit -m "Add setup and usage instructions"
-git push
-````
-
-This version makes it clear that **someone cloning your repo can reproduce the project from scratch**, while also being honest that they need to separately obtain CICIDS2017 and train the model.
+- Devarsh Devang Uchat (24BBS0153)
+- Saksham Dubey (24BBS0081)
+- Tanay Doshi (24BBS0104)

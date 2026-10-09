@@ -1,0 +1,16 @@
+Label,Category,Count
+BENIGN,Normal,2095057
+DoS Hulk,DoS,172846
+DDoS,DoS,128014
+PortScan,PortScan,90694
+DoS GoldenEye,DoS,10286
+FTP-Patator,Brute Force,5931
+DoS slowloris,DoS,5385
+DoS Slowhttptest,DoS,5228
+SSH-Patator,Brute Force,3219
+Bot,Botnet,1948
+Web Attack ï¿½ Brute Force,Web Attack,1470
+Web Attack ï¿½ XSS,Web Attack,652
+Infiltration,Other,36
+Web Attack ï¿½ Sql Injection,Web Attack,21
+Heartbleed,Other,11

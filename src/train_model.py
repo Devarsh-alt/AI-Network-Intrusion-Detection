@@ -1,145 +1,166 @@
+import json
 import joblib
+import numpy as np
+import pandas as pd
 
-from pathlib import Path
 from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import RandomForestClassifier
 
-from preprocessing import preprocess
-
-
-# Paths
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-MODEL_DIR = BASE_DIR / "models"
-
-MODEL_DIR.mkdir(parents=True, exist_ok=True)
+from config import (
+    MODEL_DIR,
+    REPORTS_DIR,
+    CATEGORIES,
+    NORMAL
+)
+from preprocessing import preprocess, feature_columns
+from compare_models import get_models
+from evaluate import evaluate_model, BINARY_NAMES
 
 
-# Prepare data
+# Scaler + Random Forest in one pipeline, so the saved model takes raw features
 
-def prepare_data():
+def build_random_forest():
 
-    X, y = preprocess()
+    return Pipeline([
+        ("scaler", StandardScaler()),
+        ("classifier", get_models()["Random Forest"])
+    ])
+
+
+# Build a replayable traffic stream for the dashboard from held-out flows:
+# stretches of normal traffic with bursts of one attack type mixed in
+
+def build_demo_stream(test, size=20000, seed=42):
+
+    rng = np.random.default_rng(seed)
+
+    pools = {
+        category: list(rng.permutation(group.index))
+        for category, group in test.groupby("Category")
+    }
+
+    attacks = [c for c in CATEGORIES if c != NORMAL and c in pools]
+
+    order = []
+
+    def take(category, count):
+        pool = pools[category]
+        taken, pools[category] = pool[:count], pool[count:]
+        return taken
+
+    while len(order) < size:
+
+        order += take(NORMAL, int(rng.integers(300, 900)))
+
+        category = attacks[int(rng.integers(len(attacks)))]
+
+        burst = take(category, int(rng.integers(60, 250)))
+        burst += take(NORMAL, len(burst))
+
+        order += list(rng.permutation(burst))
+
+    return test.loc[order[:size]].reset_index(drop=True)
+
+
+# Train binary and multi-class Random Forest models on CICIDS2017
+
+def train():
+
+    df = preprocess()
+
+    features = feature_columns(df)
+
+    df[["Label", "Category"]].value_counts().rename("Count").reset_index().to_csv(
+        REPORTS_DIR / "cicids_class_distribution.csv",
+        index=False
+    )
 
     print("\n" + "=" * 70)
     print("TRAIN / TEST SPLIT")
     print("=" * 70)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
+    train_df, test_df = train_test_split(
+        df,
         test_size=0.2,
         random_state=42,
-        stratify=y
+        stratify=df["Category"]
     )
 
-    print(f"\nTraining samples: {len(X_train):,}")
-    print(f"Testing samples : {len(X_test):,}")
+    print(f"\nTraining samples: {len(train_df):,}")
+    print(f"Testing samples : {len(test_df):,}")
 
     print("\n" + "=" * 70)
-    print("FEATURE SCALING")
+    print("TRAINING RANDOM FOREST MODELS")
     print("=" * 70)
 
-    scaler = StandardScaler()
+    print("\nTraining binary model (Normal vs Attack)...")
 
-    X_train_scaled = scaler.fit_transform(X_train)
+    binary_model = build_random_forest().fit(
+        train_df[features],
+        train_df["Target"]
+    )
 
-    X_test_scaled = scaler.transform(X_test)
+    print("Training multi-class model (attack categories)...")
 
-    print("\nScaling completed.")
+    multiclass_model = build_random_forest().fit(
+        train_df[features],
+        train_df["Category"]
+    )
 
-    print(f"\nTraining feature shape: {X_train_scaled.shape}")
-    print(f"Testing feature shape : {X_test_scaled.shape}")
+    joblib.dump(binary_model, MODEL_DIR / "cicids_binary.pkl", compress=3)
+    joblib.dump(multiclass_model, MODEL_DIR / "cicids_multiclass.pkl", compress=3)
+    joblib.dump(test_df, MODEL_DIR / "cicids_test.pkl", compress=3)
 
-    # Save scaler
+    print(f"\nModels and test set saved to: {MODEL_DIR}")
 
-    scaler_path = MODEL_DIR / "scaler.pkl"
+    # Typical values of normal traffic, used to explain predictions
+
+    baseline = train_df.loc[train_df["Category"] == NORMAL, features].median()
+
+    with open(MODEL_DIR / "normal_baseline.json", "w") as file:
+        json.dump(baseline.to_dict(), file, indent=2)
 
     joblib.dump(
-        scaler,
-        scaler_path
+        build_demo_stream(test_df),
+        MODEL_DIR / "demo_stream.pkl",
+        compress=3
     )
 
-    print(f"\nScaler saved to: {scaler_path}")
-
-    return (
-        X_train_scaled,
-        X_test_scaled,
-        y_train,
-        y_test
+    pd.DataFrame({
+        "Feature": features,
+        "Importance": multiclass_model.named_steps["classifier"].feature_importances_
+    }).sort_values("Importance", ascending=False).to_csv(
+        REPORTS_DIR / "cicids_feature_importance.csv",
+        index=False
     )
 
-
-# Train Random Forest
-
-def train_random_forest():
-
-    X_train, X_test, y_train, y_test = prepare_data()
-
-    print("\n" + "=" * 70)
-    print("TRAINING RANDOM FOREST")
-    print("=" * 70)
-
-    model = RandomForestClassifier(
-        n_estimators=100,
-        max_depth=20,
-        random_state=42,
-        n_jobs=-1,
-        class_weight="balanced"
+    evaluate_model(
+        binary_model,
+        test_df[features],
+        test_df["Target"],
+        [0, 1],
+        BINARY_NAMES,
+        "cicids_binary",
+        "CICIDS2017 Binary"
     )
 
-    print("\nNumber of trees : 100")
-    print("Maximum depth   : 20")
-    print("Class weight    : balanced")
-
-    print("\nTraining model...")
-
-    model.fit(
-        X_train,
-        y_train
+    evaluate_model(
+        multiclass_model,
+        test_df[features],
+        test_df["Category"],
+        CATEGORIES,
+        CATEGORIES,
+        "cicids_multiclass",
+        "CICIDS2017 Multi-class"
     )
-
-    print("\nRandom Forest training completed.")
-
-    # Save model
-
-    model_path = MODEL_DIR / "random_forest.pkl"
-
-    joblib.dump(
-        model,
-        model_path
-    )
-
-    print(f"Model saved to: {model_path}")
-
-    # Save test data
-
-    X_test_path = MODEL_DIR / "X_test.pkl"
-    y_test_path = MODEL_DIR / "y_test.pkl"
-
-    joblib.dump(
-        X_test,
-        X_test_path
-    )
-
-    joblib.dump(
-        y_test,
-        y_test_path
-    )
-
-    print(f"Test features saved to: {X_test_path}")
-    print(f"Test labels saved to: {y_test_path}")
-
-    return model
 
 
 # Run
 
 if __name__ == "__main__":
 
-    train_random_forest()
+    train()
 
     print("\n" + "=" * 70)
     print("MODEL TRAINING COMPLETE")
